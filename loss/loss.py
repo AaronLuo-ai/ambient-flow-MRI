@@ -7,6 +7,7 @@ def ambient_loss(model, y, A, delta=0.1, eps=1e-3, center_frac=0.08, gen=None):
     device = next(model.parameters()).device
     y, A = y.to(device, non_blocking=True), A.to(device, non_blocking=True)
     bs, C, H, W = y.shape
+
     y = y / ifft2c(y).abs().amax(dim=(1, 2, 3), keepdim=True)
 
     n_c = round(W * center_frac); c0, c1 = W // 2 - n_c // 2, W // 2 + n_c // 2

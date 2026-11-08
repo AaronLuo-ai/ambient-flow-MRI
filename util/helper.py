@@ -19,11 +19,28 @@ def plot_recon(model, y, A, t0=1e-3):
     v = torch.complex(out.float()[:, :C], out.float()[:, C:])
     x_hat = y + (1 - t0) * v                                     # one-step estimate, all lines
     model.train()
+    zf, rec = rss(ifft2c(y)[0]), rss(ifft2c(x_hat)[0])
+    print(f"shape y: {y.shape}, shape x_hat: {x_hat.shape}, shape zf: {zf.shape}, shape rec: {rec.shape}")
+    show(torch.log(rss(y[0]) + 1e-9), torch.log(rss(x_hat[0]) + 1e-9), zf, rec)   # input k | recon k | input image | recon image
+
+@torch.no_grad()
+def compute_psnr(model, y, A, t0=1e-3):
+    """Compute PSNR of one-step reconstruction without plotting."""
+    model.eval()
+    device = next(model.parameters()).device
+    y, A = y.to(device), A.to(device)
+    y = y / ifft2c(y).abs().amax(dim=(1, 2, 3), keepdim=True)
+    C, H, W = y.shape[1:]
+    t = torch.full((1,), t0, device=device)
+
+    inp = torch.cat([y.real, y.imag, A.expand(-1, 1, H, W)], dim=1)
+    with torch.autocast("cuda", dtype=torch.bfloat16):
+        out = model(inp, t * 1000).sample
+    v = torch.complex(out.float()[:, :C], out.float()[:, C:])
+    x_hat = y + (1 - t0) * v
 
     zf, rec = rss(ifft2c(y)[0]), rss(ifft2c(x_hat)[0])
     p = psnr(zf.cpu().numpy(), rec.cpu().numpy(), data_range=zf.max().item())
-    print(f"PSNR (recon vs. zero-filled input): {p:.2f} dB")
-    show(torch.log(rss(y[0]) + 1e-9), torch.log(rss(x_hat[0]) + 1e-9), zf, rec)   # input k | recon k | input image | recon image
     return p
     
 def fft2c(x):

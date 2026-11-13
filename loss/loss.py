@@ -55,7 +55,7 @@ def ambient_loss_with_plot(model, y, A, delta=0.1, eps=1e-3, center_frac=0.08, g
     v = torch.complex(out.float()[:, :C], out.float()[:, C:])
 
     show = lambda k: torch.log(rss(k[:1])[0].detach().float().cpu() + 1e-6)
-    panels = {"y": y, "x0": x0, "Bm · y": Bm * y, "Ã · x0": A_tilde * x0,
+    panels = {"y": y, "Bm · y": Bm * y, "Ã · x0": A_tilde * x0,
           f"x_t (t={t[0].item():.2f})": xt}
     fig, ax = plt.subplots(1, len(panels), figsize=(4 * len(panels), 4))
     for a, (name, k) in zip(ax, panels.items()):

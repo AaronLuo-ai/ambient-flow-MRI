@@ -12,7 +12,7 @@ def ambient_loss(model, y, A, delta=0.1, eps=1e-3, center_frac=0.08, gen=None):
     bs, C, H, W = y.shape
     y = y / ifft2c(y).abs().amax(dim=(1, 2, 3), keepdim=True)
 
-    n_c = round(W * center_frac); c0, c1 = W // 2 - n_c // 2, W // 2 + n_c // 2
+    n_c = round(W * center_frac); c0, c1 = W // 2 - round(n_c) // 2, W // 2 + round(n_c) // 2
     Bm = (torch.rand(bs, 1, 1, W, device=device, generator=gen) > delta).float()
     Bm[..., c0:c1] = 1
     A_tilde = Bm * A
@@ -24,11 +24,16 @@ def ambient_loss(model, y, A, delta=0.1, eps=1e-3, center_frac=0.08, gen=None):
     xt = tt * y + (1 - tt) * (Bm * y + x0)
     u = y - (Bm * y + x0)
 
+    # --- forward pass ---
     inp = torch.cat([xt.real, xt.imag, A_tilde.expand(-1, 1, H, W)], dim=1)
     with torch.autocast("cuda", dtype=torch.bfloat16):
         out = model(inp, t * 1000).sample
     v = torch.complex(out.float()[:, :C], out.float()[:, C:])
-    return (A * v - u).abs().pow(2).sum() / (A.sum() * C * H)
+
+    loss = (A * v - u).abs().pow(2).sum() / (A.sum() * C * H)
+    baseline = u.abs().pow(2).sum() / (A.sum() * C * H)
+    print(f"loss = {loss.item():.4f}   baseline = {baseline.item():.4f}   ratio = {(loss / baseline).item():.3f}")
+    return loss
 
 def ambient_loss_with_plot(model, y, A, delta=0.1, eps=1e-3, center_frac=0.08, gen=None):
     """Loss ‖A u_θ(x_t, Ã, t) − u‖² for one batch. gen: torch.Generator for fixed randomness (validation)."""
@@ -61,7 +66,7 @@ def ambient_loss_with_plot(model, y, A, delta=0.1, eps=1e-3, center_frac=0.08, g
     ncols  = lambda m: int(m[0, 0, 0].sum())
 
     masks  = {"Bm": Bm, "A": A, "Ã = Bm·A": A_tilde}
-    kspace = {"y": y, "Bm · y": Bm * y, f"x_t (t={t[0].item():.2f})": xt, "u": u, 
+    kspace = {"t": tt, "y": y, "Bm · y": Bm * y, f"x_t (t={t[0].item():.2f})": xt, "u": u, 
         f"tt * y (t={t[0].item():.2f})": tt * y, f"Bm * y + x0": Bm * y + x0}
 
     n = len(kspace)

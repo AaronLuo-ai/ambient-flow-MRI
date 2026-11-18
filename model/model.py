@@ -2,10 +2,10 @@ import torch
 from diffusers import UNet2DModel
 from flow_matching.utils import ModelWrapper
 
-def build_unet(n_coils=16):
+def build_unet(n_coils=16, with_mask=True):
     return UNet2DModel(
         sample_size=[320, 320],
-        in_channels=2 * n_coils + 1,
+        in_channels=2 * n_coils + (1 if with_mask else 0),   # 33 ambient, 32 plain FM
         out_channels=2 * n_coils,
         block_out_channels=(64, 128, 256, 256),
         down_block_types=("DownBlock2D", "DownBlock2D", "AttnDownBlock2D", "DownBlock2D"),

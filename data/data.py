@@ -19,6 +19,6 @@ class BrainAmbientFlowMatchingDataset(torch.utils.data.Dataset):
         A = cartesian_mask(k.shape[-1], self.accel, self.cf, seed=i)   # (1, 1, W)
 
         # Step 2: apply it once, giving the accelerated k-space y = A x1
-        y = A[0] * k
+        Ay = A[0] * k
 
-        return y, A, i    
+        return Ay, A, i    

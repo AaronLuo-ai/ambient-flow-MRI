@@ -43,25 +43,8 @@ def save_curves(hist):
     fig.tight_layout(); fig.savefig(os.path.join(save_path, "curves.png"), dpi=100); plt.close(fig)
 
 def train():
-    device = "cuda" if torch.cuda.is_available() else "cpu"
-    log(f"device: {device}")
 
-    train_set = BrainAmbientFlowMatchingDataset(index=split_index["train"], accel=4, cf=0.08)
-    val_set   = BrainAmbientFlowMatchingDataset(index=split_index["val"],   accel=4, cf=0.08)
-    train_loader = torch.utils.data.DataLoader(train_set, batch_size=BATCH_SIZE, shuffle=True,
-                                               num_workers=4, pin_memory=True, drop_last=True,
-                                               persistent_workers=True)
-    val_loader = torch.utils.data.DataLoader(val_set, batch_size=BATCH_SIZE, shuffle=False, num_workers=4)
-
-    log(f"train {len(train_set)} slices ({len(train_loader)} steps/epoch), val {len(val_set)} slices")
-    model = build_unet(n_coils=N_COILS).to(device)
-    optim = torch.optim.AdamW(model.parameters(), lr=LR)
-
-    hist = {"train_step": [], "train_loss": [], "val_step": [], "val_loss": []}
-    best_val, best_epoch = float("inf"), -1
-    t0 = time.time()
-
-    log(f"starting training for {N_EPOCHS} epochs")
+    
 
     train_losses, val_losses, train_steps, val_steps = [], [], [], []
     start_time = time.time()
@@ -71,9 +54,16 @@ def train():
         # ---- train ----
         model.train()
         epoch_losses = []
-        for y, A, _ in train_loader:
-            y, A = y.to(device), A.to(device)
-            train_loss = ambient_loss(model, y, A, delta=DELTA, eps=EPS)
+        it = 0
+        for Ay, A, _ in train_loader:
+            it += 1
+            Ay, A = Ay.to(device), A.to(device)
+            train_loss = 0
+            t = torch.rand(Ay.shape[0], device=device).view(-1, 1, 1, 1)
+            if it % 20 == 0:
+                train_loss = flow_loss(model, Ay, A, t, eps=EPS, plot=True, gen=None)[0]
+            else:
+                train_loss = flow_loss(model, Ay, A, t, eps=EPS, plot=False, gen=None)[0]
             optim.zero_grad(set_to_none=True)
             train_loss.backward()
             torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
@@ -84,26 +74,21 @@ def train():
         print(f"epoch {epoch}: train {train_losses[-1]:.4f}")
         # ---- validate ----
         model.eval()
-        with torch.random.fork_rng(devices=[device]), torch.no_grad():
-            torch.manual_seed(0)                              # fixed seed inside this block only
-            val_loss = np.mean([ambient_loss(model, vy.to(device), vA.to(device),
-                                            delta=DELTA, eps=EPS).item()
-                                for vy, vA, _ in val_loader])
+        torch.manual_seed(0)                                     # same randomness every epoch
+        with torch.no_grad():
+            val_loss = np.mean([flow_loss(model, vAy.to(device), vA.to(device),
+                                        torch.rand(vAy.shape[0], device=device).view(-1, 1, 1, 1),
+                                        eps=EPS, plot=False, gen=None)[0].item()
+                                for vAy, vA, _ in val_loader])    # mean over all val batches
         val_losses.append(val_loss)
         val_steps.append(epoch)
         print(f"epoch {epoch}: train {train_losses[-1]:.4f}  val {val_loss:.4f}")
 
         # ---- checkpoint: once per epoch, on the mean val loss ----
         if val_loss < best_val:
-            best_val, best_epoch = val_loss, epoch
-            torch.save({"model": model.state_dict(), "best_val": best_val, "best_epoch": best_epoch},
-                    f"{ckpt_dir}/best.pt")
-        
-        hist = {"train_step": train_steps, "train_loss": train_losses,
-        "val_step": val_steps, "val_loss": val_losses}
-        json.dump(hist, open(f"{save_path}/history.json", "w"))
-        save_curves(hist)
-        t0 = time.time()
+            best_val, best_step = val_loss, epoch
+            torch.save({"model": model.state_dict(), "best_val": best_val, "best_step": best_step},
+                    f"{run_dir}/best.pt")
 
 def main():
     train()

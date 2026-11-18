@@ -1,3 +1,6 @@
 12:25:23 | device: cuda
 12:25:23 | train 9134 slices (2283 steps/epoch), val 1150 slices
 12:25:23 | starting training for 20 epochs
+16:23:46 | device: cuda
+16:23:46 | train 9134 slices (2283 steps/epoch), val 1150 slices
+16:23:46 | starting training for 20 epochs

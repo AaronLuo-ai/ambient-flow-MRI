@@ -103,6 +103,12 @@ def cartesian_mask(W, accel=4, center_frac=0.08, seed=0):
     m[c - n_center // 2 : c + n_center // 2] = True                     # fully sampled center
     return torch.from_numpy(m).float()[None, None, :]                   # (1, 1, W)
 
+def psnr(y, ref):
+    """PSNR between the RSS images of two k-spaces (ref = reference)."""
+    a, b = rss(ifft2c(y)).abs(), rss(ifft2c(ref)).abs()
+    mse = ((a - b) ** 2).mean()
+    return (20 * torch.log10(b.max() / mse.sqrt())).item()
+    
 def rss(z):
     """Combine coils: (C, H, W) complex → (H, W) magnitude."""
     return z.abs().pow(2).sum(0).sqrt()
